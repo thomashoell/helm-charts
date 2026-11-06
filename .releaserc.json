@@ -1,0 +1,42 @@
+{
+  "branches": [
+    "main"
+  ],
+  "extends": "semantic-release-monorepo",
+  "plugins": [
+    [
+      "@semantic-release/commit-analyzer",
+      {
+        "preset": "conventionalcommits"
+      }
+    ],
+    [
+      "@semantic-release/release-notes-generator",
+      {
+        "preset": "conventionalcommits"
+      }
+    ],
+    [
+      "@semantic-release/changelog",
+      {
+        "changelogFile": "CHANGELOG.md"
+      }
+    ],
+    [
+      "@semantic-release/exec",
+      {
+        "prepareCmd": "\"$GITHUB_WORKSPACE/.github/scripts/prepare-chart-release.sh\" ${nextRelease.version}"
+      }
+    ],
+    [
+      "@semantic-release/git",
+      {
+        "assets": [
+          "Chart.yaml",
+          "CHANGELOG.md"
+        ],
+        "message": "chore(release): ${nextRelease.gitTag} [skip ci]\n\n${nextRelease.notes}"
+      }
+    ]
+  ]
+}

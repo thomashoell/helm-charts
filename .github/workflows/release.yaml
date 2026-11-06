@@ -1,0 +1,141 @@
+---
+name: Release Charts
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'charts/**'
+
+# never run two releases at the same time, both would push to main
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      # main is protected by a ruleset; only the release app may push to it (bypass list)
+      - name: Create GitHub App token
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510  # v3.3.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      # the persisted app token is used by every git push in this job (semantic-release and cr index)
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app.outputs.token }}
+
+      - name: Configure Git
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+        run: |
+          user_id=$(gh api "/users/${APP_SLUG}[bot]" --jq .id)
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # conventional-changelog-conventionalcommits stays on 9.x: v10 needs conventional-changelog-writer 9,
+      # but semantic-release 25 (commit-analyzer 13 / release-notes-generator 14) still ships writer 8
+      - name: Install semantic-release
+        run: |
+          npm install --no-save --no-package-lock \
+            semantic-release@25 \
+            semantic-release-monorepo@8 \
+            @semantic-release/changelog@7 \
+            @semantic-release/exec@7 \
+            @semantic-release/git@11 \
+            conventional-changelog-conventionalcommits@9
+
+      # One semantic-release run per chart (config: .releaserc.json). semantic-release-monorepo only
+      # considers commits touching the chart directory; tags keep the chart-releaser format
+      # <chart>-<version>. A release bumps Chart.yaml, updates CHANGELOG.md, commits, tags and pushes.
+      # No GitHub release is created here, chart-releaser does that below.
+      - name: Version charts
+        env:
+          GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          for chart in charts/*/; do
+            name=$(basename "$chart")
+            echo "::group::semantic-release $name"
+            (
+              cd "$chart"
+              # semantic-release-monorepo reads the package name from package.json (not committed).
+              # semantic-release only looks for its config in the working directory, so the shared
+              # .releaserc.json is copied next to it - without it, the defaults would be used
+              # (@semantic-release/github creates releases, nothing is committed, Chart.yaml stays unchanged).
+              printf '{"name":"%s","private":true}\n' "$name" > package.json
+              cp "$GITHUB_WORKSPACE/.releaserc.json" .releaserc.json
+              trap 'rm -f package.json .releaserc.json' EXIT
+              "$GITHUB_WORKSPACE/node_modules/.bin/semantic-release" --tag-format "${name}-\${version}"
+            )
+            echo "::endgroup::"
+          done
+
+      - name: Install Helm
+        uses: azure/setup-helm@v5
+        with:
+          version: v3.16.4
+
+      - name: Add repositories
+        run: |
+          for dir in $(ls -d charts/*/); do
+            helm dependency list $dir 2> /dev/null | tail +2 | head -n -1 | awk '{ print "helm repo add " $1 " " $3 }' | while read cmd; do $cmd; done
+          done
+
+      # Package every chart whose current version has no GitHub release yet. Independent of
+      # chart-releaser's "changed since last tag" detection, which doesn't work with the tags
+      # semantic-release has just created.
+      - name: Package unreleased chart versions
+        id: package
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          rm -rf .cr-release-packages && mkdir -p .cr-release-packages
+          for chart in charts/*/; do
+            name=$(basename "$chart")
+            version=$(awk '/^version:/ { print $2 }' "$chart/Chart.yaml")
+            if gh release view "${name}-${version}" > /dev/null 2>&1; then
+              echo "${name}-${version}: already released"
+              continue
+            fi
+            echo "${name}-${version}: packaging"
+            helm dependency build "$chart"
+            helm package "$chart" --destination .cr-release-packages
+          done
+          if compgen -G ".cr-release-packages/*.tgz" > /dev/null; then
+            echo "packaged=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The action is only used to install cr: with skip_packaging, v1.7.0 fails at the end
+      # ("latest_tag: unbound variable", fixed on main but not released yet)
+      - name: Install chart-releaser
+        if: steps.package.outputs.packaged == 'true'
+        uses: helm/chart-releaser-action@v1.9.0
+        with:
+          install_only: true
+
+      - name: Run chart-releaser
+        if: steps.package.outputs.packaged == 'true'
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+        run: |
+          owner="${GITHUB_REPOSITORY%%/*}"
+          repo="${GITHUB_REPOSITORY#*/}"
+          cr upload --owner "$owner" --git-repo "$repo" --commit "$(git rev-parse HEAD)" --skip-existing
+          rm -rf .cr-index && mkdir -p .cr-index
+          cr index --owner "$owner" --git-repo "$repo" --push

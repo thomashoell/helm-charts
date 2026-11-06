@@ -1,0 +1,26 @@
+### IntelliJ IDEA ###
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+### VS Code ###
+.vscode/
+
+### OS ###
+.DS_Store
+Thumbs.db
+
+### Release tooling (local runs) ###
+# semantic-release
+node_modules/
+package-lock.json
+# written per chart during a release run, removed afterwards
+charts/*/package.json
+charts/*/.releaserc.json
+# chart-releaser
+.cr-release-packages/
+.cr-index/
+# helm dependency build
+charts/*/charts/*.tgz

@@ -1,0 +1,9 @@
+helm-extra-args: --timeout 600
+check-version-increment: false
+debug: true
+# same yamllint rules as pre-commit
+lint-conf: .yamllint.yaml
+
+# repositories of chart dependencies, ct lint adds them before building dependencies
+# chart-repos:
+#   - name=https://example.github.io/helm-charts/

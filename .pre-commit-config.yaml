@@ -1,0 +1,35 @@
+# Install once: pip install pre-commit && pre-commit install
+# Format/lint everything: pre-commit run --all-files
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: check-merge-conflict
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+        # templates/ and files/ contain Go templates (rendered with tpl), not plain YAML
+        exclude: ^charts/[^/]+/(templates|files)/
+
+  # formats Chart.yaml / values.yaml (Go templates are left alone)
+  - repo: https://github.com/google/yamlfmt
+    rev: v0.21.0
+    hooks:
+      - id: yamlfmt
+        files: ^charts/[^/]+/[^/]+\.ya?ml$
+
+  # same rules as "ct lint" in CI (.yamllint.yaml)
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.38.0
+    hooks:
+      - id: yamllint
+        args: [--strict]
+
+  # helm lint for every chart with changed files (needs helm installed)
+  - repo: https://github.com/gruntwork-io/pre-commit
+    rev: v0.1.30
+    hooks:
+      - id: helmlint

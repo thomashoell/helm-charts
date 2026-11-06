@@ -1,0 +1,44 @@
+# "daily" runs Monday to Friday
+version: 2
+updates:
+  # Docker images in values.yaml (image.repository/image.tag) and chart dependencies in Chart.yaml
+  - package-ecosystem: helm
+    directories:
+      - "/charts/*"
+    schedule:
+      interval: daily
+      time: "06:00"
+      timezone: Europe/Berlin
+    # "fix(deps): ..." is a conventional commit, so semantic-release creates a patch release
+    # of the affected chart once the PR is merged
+    commit-message:
+      prefix: fix
+      include: scope
+    open-pull-requests-limit: 10
+    ignore:
+      # updated right after each sunspec-exporter release by .github/workflows/update-sunspec-exporter.yaml
+      - dependency-name: "*/sunspec-exporter"
+
+  # versions of the actions used in .github/workflows
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: daily
+      time: "06:00"
+      timezone: Europe/Berlin
+    commit-message:
+      prefix: ci
+
+  # hook versions in .pre-commit-config.yaml
+  - package-ecosystem: pre-commit
+    directory: "/"
+    schedule:
+      interval: daily
+      time: "06:00"
+      timezone: Europe/Berlin
+    commit-message:
+      prefix: ci
+    groups:
+      pre-commit:
+        patterns:
+          - "*"
