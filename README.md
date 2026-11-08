@@ -8,6 +8,12 @@ helm repo update
 helm search repo thomashoell
 ```
 
+Every release is also pushed to GHCR as an OCI artifact:
+
+```bash
+helm install sunspec-exporter oci://ghcr.io/thomashoell/charts/sunspec-exporter --version <version>
+```
+
 # Available Helm charts
 
 | Chart | Description |

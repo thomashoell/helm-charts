@@ -18,6 +18,7 @@ jobs:
   release:
     permissions:
       contents: write
+      packages: write   # OCI copies of the charts on GHCR
     runs-on: ubuntu-latest
     steps:
       # main is protected by a ruleset; only the release app may push to it (bypass list)
@@ -139,3 +140,15 @@ jobs:
           cr upload --owner "$owner" --git-repo "$repo" --commit "$(git rev-parse HEAD)" --skip-existing
           rm -rf .cr-index && mkdir -p .cr-index
           cr index --owner "$owner" --git-repo "$repo" --push
+
+      # Same packages as OCI artifacts on GHCR (oci://ghcr.io/<owner>/charts/<chart>): consumers (tg-env)
+      # pull from the registry instead of GitHub release downloads (chart-releaser's index points there).
+      - name: Push charts to GHCR
+        if: steps.package.outputs.packaged == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$GH_TOKEN" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
+          for pkg in .cr-release-packages/*.tgz; do
+            helm push "$pkg" "oci://ghcr.io/${GITHUB_REPOSITORY_OWNER}/charts"
+          done
