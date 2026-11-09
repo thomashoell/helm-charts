@@ -14,6 +14,10 @@ Every release is also pushed to GHCR as an OCI artifact:
 helm install sunspec-exporter oci://ghcr.io/thomashoell/charts/sunspec-exporter --version <version>
 ```
 
+New chart: let the release workflow do the first push. A package pushed by hand starts **private** on GHCR
+(visibility can't be changed via API or Tofu) – then once in the package settings: Manage Actions access →
+`thomashoell/helm-charts` (Write), Change visibility → Public.
+
 # Available Helm charts
 
 | Chart | Description |
