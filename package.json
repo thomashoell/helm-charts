@@ -1,0 +1,8 @@
+{
+  "name": "helm-charts",
+  "private": true,
+  "description": "npm workspaces only for multi-semantic-release (release per chart), no npm package",
+  "workspaces": [
+    "charts/*"
+  ]
+}

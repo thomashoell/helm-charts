@@ -23,3 +23,5 @@
 .vscode/
 # Written by Terragrunt into every directory of the module copy in .terragrunt-cache
 .terragrunt-source-manifest
+# release metadata (multi-semantic-release)
+package.json

@@ -1,0 +1,5 @@
+{
+  "name": "sunspec-exporter",
+  "version": "0.0.0",
+  "description": "release metadata for multi-semantic-release (version: see Chart.yaml and the tags <chart>-<version>)"
+}

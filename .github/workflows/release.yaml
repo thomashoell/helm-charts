@@ -21,7 +21,20 @@ jobs:
       packages: write   # OCI copies of the charts on GHCR
     runs-on: ubuntu-latest
     steps:
-      # main is protected by a ruleset; only the release app may push to it (bypass list)
+      # One release per chart with multi-semantic-release (dreitier/shared-ci-components): npm workspaces
+      # charts/* (package.json per chart, version stays 0.0.0 - the tags are the truth), only commits touching
+      # the chart directory count. Config: .releaserc.json (prepareCmd bumps Chart.yaml/appVersion, CHANGELOG.md,
+      # release commit; no GitHub release - chart-releaser creates it below) and .multi-releaserc.json (tags keep
+      # the chart-releaser format <chart>-<version>). Runs as the release app, which may bypass the main ruleset.
+      - name: Version charts
+        id: version
+        # v1.4.0 is the first release with @semantic-release/exec (prepareCmd in .releaserc.json)
+        uses: dreitier/shared-ci-components/multi-semantic-release@58a8cb9e21175302f10c5254d74e55c9af22485e  # v1.4.0
+        with:
+          app-client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      # cr index pushes to gh-pages with the app token (persisted by the checkout below)
       - name: Create GitHub App token
         id: app
         uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc  # v3.4.0
@@ -29,10 +42,11 @@ jobs:
           client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
-      # the persisted app token is used by every git push in this job (semantic-release and cr index)
+      # the action's checkout doesn't persist credentials; main now includes the release commits
       - name: Checkout
         uses: actions/checkout@v7
         with:
+          ref: ${{ github.ref_name }}
           fetch-depth: 0
           token: ${{ steps.app.outputs.token }}
 
@@ -44,48 +58,6 @@ jobs:
           user_id=$(gh api "/users/${APP_SLUG}[bot]" --jq .id)
           git config user.name "${APP_SLUG}[bot]"
           git config user.email "${user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24
-
-      # conventional-changelog-conventionalcommits stays on 9.x: v10 needs conventional-changelog-writer 9,
-      # but semantic-release 25 (commit-analyzer 13 / release-notes-generator 14) still ships writer 8
-      - name: Install semantic-release
-        run: |
-          npm install --no-save --no-package-lock \
-            semantic-release@25 \
-            semantic-release-monorepo@8 \
-            @semantic-release/changelog@7 \
-            @semantic-release/exec@7 \
-            @semantic-release/git@11 \
-            conventional-changelog-conventionalcommits@9
-
-      # One semantic-release run per chart (config: .releaserc.json). semantic-release-monorepo only
-      # considers commits touching the chart directory; tags keep the chart-releaser format
-      # <chart>-<version>. A release bumps Chart.yaml, updates CHANGELOG.md, commits, tags and pushes.
-      # No GitHub release is created here, chart-releaser does that below.
-      - name: Version charts
-        env:
-          GITHUB_TOKEN: ${{ steps.app.outputs.token }}
-        run: |
-          for chart in charts/*/; do
-            name=$(basename "$chart")
-            echo "::group::semantic-release $name"
-            (
-              cd "$chart"
-              # semantic-release-monorepo reads the package name from package.json (not committed).
-              # semantic-release only looks for its config in the working directory, so the shared
-              # .releaserc.json is copied next to it - without it, the defaults would be used
-              # (@semantic-release/github creates releases, nothing is committed, Chart.yaml stays unchanged).
-              printf '{"name":"%s","private":true}\n' "$name" > package.json
-              cp "$GITHUB_WORKSPACE/.releaserc.json" .releaserc.json
-              trap 'rm -f package.json .releaserc.json' EXIT
-              "$GITHUB_WORKSPACE/node_modules/.bin/semantic-release" --tag-format "${name}-\${version}"
-            )
-            echo "::endgroup::"
-          done
 
       - name: Install Helm
         uses: azure/setup-helm@v5
