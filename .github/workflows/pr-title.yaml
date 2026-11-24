@@ -2,6 +2,7 @@ name: PR title
 
 # PRs are squash-merged and the PR title becomes the commit message on main,
 # which semantic-release uses to decide whether and how a chart is released.
+# Required status check: "pr-title / Conventional Commit".
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
@@ -10,10 +11,5 @@ permissions:
   pull-requests: read
 
 jobs:
-  conventional-commit:
-    name: Conventional Commit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: amannn/action-semantic-pull-request@c5e23b7e584519ee15caa684cf60d056aa9f035f  # v6.1.3
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  pr-title:
+    uses: dreitier/shared-ci-components/.github/workflows/conventional-pr-title.yml@58a8cb9e21175302f10c5254d74e55c9af22485e  # v1.4.0
